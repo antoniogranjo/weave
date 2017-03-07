@@ -147,6 +147,7 @@ func main() {
 		dnsConfig          dnsConfig
 		trustedSubnetStr   string
 		dbPrefix           string
+		hostRoot           string
 		isAWSVPC           bool
 		discoveryEndpoint  string
 		token              string
@@ -198,6 +199,7 @@ func main() {
 	mflag.BoolVar(&bridgeConfig.NoFastdp, []string{"-no-fastdp"}, false, "Disable Fast Datapath")
 	mflag.StringVar(&trustedSubnetStr, []string{"-trusted-subnets"}, "", "comma-separated list of trusted subnets in CIDR notation")
 	mflag.StringVar(&dbPrefix, []string{"-db-prefix"}, "/weavedb/weave", "pathname/prefix of filename to store data")
+	mflag.StringVar(&hostRoot, []string{"-host-root"}, "", "path to reach host filesystem")
 	mflag.BoolVar(&isAWSVPC, []string{"-awsvpc"}, false, "use AWS VPC for routing")
 	mflag.StringVar(&discoveryEndpoint, []string{"-peer-discovery-url"}, "https://cloud.weave.works/api/net", "url for peer discovery")
 	mflag.StringVar(&token, []string{"-token"}, "", "token for peer discovery")
@@ -252,6 +254,10 @@ func main() {
 			Log.Errorf("While checking address assignment type of %s: %s", bridgeConfig.DockerBridgeName, err)
 		}
 	}
+
+	name := peerName(routerName, dbPrefix, hostRoot)
+
+	bridgeConfig.Mac = name.String()
 	bridgeType, err := weavenet.CreateBridge(&bridgeConfig)
 	checkFatal(err)
 	Log.Println("Bridge type is", bridgeType)
@@ -266,8 +272,6 @@ func main() {
 			Log.Errorf("DetectHairpin failed: %s", err)
 		}
 	}
-
-	name := peerName(routerName)
 
 	if nickName == "" {
 		var err error
@@ -592,13 +596,15 @@ func determinePassword(password string) []byte {
 	return []byte(password)
 }
 
-func peerName(routerName string) mesh.PeerName {
+func peerName(routerName, dbPrefix, hostRoot string) mesh.PeerName {
 	if routerName == "" {
 		iface, err := net.InterfaceByName(weavenet.WeaveBridgeName)
-		if err != nil {
-			Log.Fatalf("Unable to find bridge %q", weavenet.WeaveBridgeName)
+		if err == nil {
+			routerName = iface.HardwareAddr.String()
+		} else {
+			routerName, err = weavenet.GetSystemPeerName(dbPrefix, hostRoot)
+			checkFatal(err)
 		}
-		routerName = iface.HardwareAddr.String()
 	}
 	name, err := mesh.PeerNameFromUserInput(routerName)
 	checkFatal(err)
