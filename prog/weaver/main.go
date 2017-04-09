@@ -353,7 +353,7 @@ func main() {
 		var t tracker.LocalRangeTracker
 		if isAWSVPC {
 			Log.Infoln("Creating AWSVPC LocalRangeTracker")
-			t, err = tracker.NewAWSVPCTracker()
+			t, err = tracker.NewAWSVPCTracker(bridgeConfig.WeaveBridgeName)
 			if err != nil {
 				Log.Fatalf("Cannot create AWSVPC LocalRangeTracker: %s", err)
 			}
