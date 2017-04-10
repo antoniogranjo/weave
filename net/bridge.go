@@ -264,17 +264,16 @@ func initFastdp(config *BridgeConfig) error {
 	if err != nil {
 		return err
 	}
-	mtu := config.MTU
-	if mtu == 0 {
+	if config.MTU == 0 {
 		/* GCE has the lowest underlay network MTU we're likely to encounter on
 		   a local network, at 1460 bytes.  To get the overlay MTU from that we
 		   subtract 20 bytes for the outer IPv4 header, 8 bytes for the outer
 		   UDP header, 8 bytes for the vxlan header, and 14 bytes for the inner
 		   ethernet header.  In addition, we subtract 34 bytes for the ESP overhead
 		   which is needed for the vxlan encryption. */
-		mtu = 1376
+		config.MTU = 1376
 	}
-	return netlink.LinkSetMTU(datapath, mtu)
+	return netlink.LinkSetMTU(datapath, config.MTU)
 }
 
 func initBridgedFastdp(config *BridgeConfig) error {
