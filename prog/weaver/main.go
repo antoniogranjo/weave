@@ -13,7 +13,6 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/pkg/profile"
-	"github.com/vishvananda/netlink"
 	"github.com/weaveworks/common/mflag"
 	"github.com/weaveworks/common/signals"
 	"github.com/weaveworks/mesh"
@@ -489,11 +488,7 @@ func createOverlay(bridgeType weavenet.BridgeType, config weavenet.BridgeConfig,
 		bridge = fastdp.Bridge()
 		overlay.Add("fastdp", fastdp.Overlay())
 	case weavenet.Bridge:
-		bridgeIfName, pcapIfaceName := "vethwe-bridge", "vethwe-pcap"
-		_, err := weavenet.CreateAndAttachVeth(bridgeIfName, pcapIfaceName, config.WeaveBridgeName, config.MTU, true, func(veth netlink.Link) error {
-			return netlink.LinkSetUp(veth)
-		})
-		iface, err := weavenet.EnsureInterface(pcapIfaceName)
+		iface, err := weavenet.EnsureInterface(weavenet.PcapIfaceName)
 		checkFatal(err)
 		bridge, err = weave.NewPcap(iface, bufSzMB*1024*1024) // bufsz flag is in MB
 		checkFatal(err)
