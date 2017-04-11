@@ -61,7 +61,8 @@ func DetectBridgeType(weaveBridgeName, datapathName string) BridgeType {
 		return Fastdp
 	case isDatapath(datapath) && isBridge(bridge):
 		return BridgedFastdp
-	// TODO: AWSVPC
+		// We cannot detect AWSVPC here; it looks just like Bridge.
+		// Anyone who cares will have to know some other way.
 	default:
 		return Inconsistent
 	}
@@ -178,6 +179,7 @@ type BridgeConfig struct {
 	DatapathName     string
 	NoFastdp         bool
 	NoBridgedFastdp  bool
+	IsAWSVPC         bool
 	ExpectNPC        bool
 	MTU              int
 	Port             int
@@ -221,6 +223,22 @@ func CreateBridge(config *BridgeConfig) (BridgeType, error) {
 
 		if err = configureIPTables(config); err != nil {
 			return bridgeType, errors.Wrap(err, "configuring iptables")
+		}
+	}
+
+	if config.IsAWSVPC {
+		bridgeType = AWSVPC
+		// Set proxy_arp on the bridge, so that it could accept packets destined
+		// to containers within the same subnet but running on remote hosts.
+		// Without it, exact routes on each container are required.
+		if err := sysctl("net/ipv4/conf/"+config.WeaveBridgeName+"/proxy_arp", "1"); err != nil {
+			return bridgeType, errors.Wrap(err, "setting proxy_arp")
+		}
+		// Avoid delaying the first ARP request. Also, setting it to 0 avoids
+		// placing the request into a bounded queue as it can be seen:
+		// https://git.kernel.org/cgit/linux/kernel/git/stable/linux-stable.git/tree/net/ipv4/arp.c?id=refs/tags/v4.6.1#n819
+		if err := sysctl("net/ipv4/neigh/"+config.WeaveBridgeName+"/proxy_delay", "0"); err != nil {
+			return bridgeType, errors.Wrap(err, "setting proxy_arp")
 		}
 	}
 

@@ -147,7 +147,6 @@ func main() {
 		trustedSubnetStr   string
 		dbPrefix           string
 		hostRoot           string
-		isAWSVPC           bool
 		discoveryEndpoint  string
 		token              string
 		advertiseAddress   string
@@ -199,7 +198,7 @@ func main() {
 	mflag.StringVar(&trustedSubnetStr, []string{"-trusted-subnets"}, "", "comma-separated list of trusted subnets in CIDR notation")
 	mflag.StringVar(&dbPrefix, []string{"-db-prefix"}, "/weavedb/weave", "pathname/prefix of filename to store data")
 	mflag.StringVar(&hostRoot, []string{"-host-root"}, "", "path to reach host filesystem")
-	mflag.BoolVar(&isAWSVPC, []string{"-awsvpc"}, false, "use AWS VPC for routing")
+	mflag.BoolVar(&bridgeConfig.IsAWSVPC, []string{"-awsvpc"}, false, "use AWS VPC for routing")
 	mflag.StringVar(&discoveryEndpoint, []string{"-peer-discovery-url"}, "https://cloud.weave.works/api/net", "url for peer discovery")
 	mflag.StringVar(&token, []string{"-token"}, "", "token for peer discovery")
 	mflag.StringVar(&advertiseAddress, []string{"-advertise-address"}, "", "address to advertise for peer discovery")
@@ -263,7 +262,7 @@ func main() {
 
 	config.Password = determinePassword(password)
 
-	overlay, bridge := createOverlay(bridgeType, bridgeConfig, isAWSVPC, config.Host, config.Port, bufSzMB, config.Password != nil)
+	overlay, bridge := createOverlay(bridgeType, bridgeConfig, config.Host, config.Port, bufSzMB, config.Password != nil)
 	networkConfig.Bridge = bridge
 
 	if bridge != nil {
@@ -281,7 +280,7 @@ func main() {
 	config.TrustedSubnets = parseTrustedSubnets(trustedSubnetStr)
 	config.PeerDiscovery = !noDiscovery
 
-	if isAWSVPC && len(config.Password) > 0 {
+	if bridgeConfig.IsAWSVPC && len(config.Password) > 0 {
 		Log.Fatalf("--awsvpc mode is not compatible with the --password option")
 	}
 
@@ -327,7 +326,7 @@ func main() {
 	}
 
 	network := ""
-	if isAWSVPC {
+	if bridgeConfig.IsAWSVPC {
 		network = "awsvpc"
 	}
 	checkForUpdates(dockerVersion, network)
@@ -350,7 +349,7 @@ func main() {
 	)
 	if ipamConfig.Enabled() {
 		var t tracker.LocalRangeTracker
-		if isAWSVPC {
+		if bridgeConfig.IsAWSVPC {
 			Log.Infoln("Creating AWSVPC LocalRangeTracker")
 			t, err = tracker.NewAWSVPCTracker(bridgeConfig.WeaveBridgeName)
 			if err != nil {
@@ -468,7 +467,7 @@ func (nopPacketLogging) LogPacket(string, weave.PacketKey) {
 func (nopPacketLogging) LogForwardPacket(string, weave.ForwardPacketKey) {
 }
 
-func createOverlay(bridgeType weavenet.BridgeType, config weavenet.BridgeConfig, isAWSVPC bool, host string, port int, bufSzMB int, enableEncryption bool) (weave.NetworkOverlay, weave.Bridge) {
+func createOverlay(bridgeType weavenet.BridgeType, config weavenet.BridgeConfig, host string, port int, bufSzMB int, enableEncryption bool) (weave.NetworkOverlay, weave.Bridge) {
 	overlay := weave.NewOverlaySwitch()
 	var bridge weave.Bridge
 	var ignoreSleeve bool
