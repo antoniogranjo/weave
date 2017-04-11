@@ -1,13 +1,13 @@
 package net
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/coreos/go-iptables/iptables"
+	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
 
 	"github.com/weaveworks/weave/common/odp"
@@ -68,9 +68,10 @@ func DetectBridgeType(weaveBridgeName, datapathName string) BridgeType {
 var ErrSetBridgeMac = errors.New("Setting $DOCKER_BRIDGE MAC (mitigate https://github.com/docker/docker/issues/14908)")
 
 func EnforceAddrAssignType(bridgeName string) error {
-	addrAssignType, err := ioutil.ReadFile(fmt.Sprintf("/sys/class/net/%s/addr_assign_type", bridgeName))
+	sysctlFilename := fmt.Sprintf("/sys/class/net/%s/addr_assign_type", bridgeName)
+	addrAssignType, err := ioutil.ReadFile(sysctlFilename)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "reading %q", sysctlFilename)
 	}
 
 	// From include/uapi/linux/netdevice.h
@@ -82,16 +83,16 @@ func EnforceAddrAssignType(bridgeName string) error {
 	if addrAssignType[0] != '3' {
 		link, err := netlink.LinkByName(bridgeName)
 		if err != nil {
-			return err
+			return errors.Wrapf(err, "EnforceAddrAssignType finding bridge %s", bridgeName)
 		}
 
 		mac, err := RandomMAC()
 		if err != nil {
-			return err
+			return errors.Wrap(err, "creating random MAC")
 		}
 
 		if err := netlink.LinkSetHardwareAddr(link, mac); err != nil {
-			return err
+			return errors.Wrapf(err, "setting bridge %s address to %v", bridgeName, mac)
 		}
 		return ErrSetBridgeMac
 	}
@@ -194,7 +195,7 @@ func CreateBridge(config *BridgeConfig) (BridgeType, error) {
 			}
 			odpSupported, err := odp.CreateDatapath(config.DatapathName)
 			if err != nil {
-				return None, err
+				return None, errors.Wrapf(err, "creating datapath %q", config.DatapathName)
 			}
 			if !odpSupported {
 				bridgeType = Bridge
@@ -217,13 +218,13 @@ func CreateBridge(config *BridgeConfig) (BridgeType, error) {
 		}
 
 		if err = configureIPTables(config); err != nil {
-			return bridgeType, err
+			return bridgeType, errors.Wrap(err, "configuring iptables")
 		}
 	}
 
 	if bridgeType == Bridge {
 		if err := EthtoolTXOff(config.WeaveBridgeName); err != nil {
-			return bridgeType, err
+			return bridgeType, errors.Wrap(err, "setting tx off")
 		}
 	}
 
@@ -232,7 +233,7 @@ func CreateBridge(config *BridgeConfig) (BridgeType, error) {
 	}
 
 	if err := ConfigureARPCache(config.WeaveBridgeName); err != nil {
-		return bridgeType, err
+		return bridgeType, errors.Wrapf(err, "configuring ARP cache on bridge %q", config.WeaveBridgeName)
 	}
 
 	return bridgeType, nil
@@ -241,7 +242,7 @@ func CreateBridge(config *BridgeConfig) (BridgeType, error) {
 func initBridge(config *BridgeConfig) error {
 	mac, err := net.ParseMAC(config.Mac)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "parsing bridge MAC %q", config.Mac)
 	}
 
 	linkAttrs := netlink.NewLinkAttrs()
@@ -253,7 +254,7 @@ func initBridge(config *BridgeConfig) error {
 	}
 	linkAttrs.MTU = mtu // TODO this probably doesn't work - see weave script
 	if err = netlink.LinkAdd(&netlink.Bridge{LinkAttrs: linkAttrs}); err != nil {
-		return err
+		return errors.Wrapf(err, "creating bridge %q", config.WeaveBridgeName)
 	}
 
 	return nil
@@ -262,7 +263,7 @@ func initBridge(config *BridgeConfig) error {
 func initFastdp(config *BridgeConfig) error {
 	datapath, err := netlink.LinkByName(config.DatapathName)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "finding datapath %q", config.DatapathName)
 	}
 	if config.MTU == 0 {
 		/* GCE has the lowest underlay network MTU we're likely to encounter on
@@ -273,7 +274,10 @@ func initFastdp(config *BridgeConfig) error {
 		   which is needed for the vxlan encryption. */
 		config.MTU = 1376
 	}
-	return netlink.LinkSetMTU(datapath, config.MTU)
+	if err := netlink.LinkSetMTU(datapath, config.MTU); err != nil {
+		return errors.Wrapf(err, "setting datapath %q mtu %d", config.WeaveBridgeName, config.MTU)
+	}
+	return nil
 }
 
 func initBridgedFastdp(config *BridgeConfig) error {
@@ -285,14 +289,14 @@ func initBridgedFastdp(config *BridgeConfig) error {
 	}
 	if _, err := CreateAndAttachVeth("vethwe-bridge", "vethwe-datapath", config.WeaveBridgeName, config.MTU, true, func(veth netlink.Link) error {
 		if err := netlink.LinkSetUp(veth); err != nil {
-			return err
+			return errors.Wrapf(err, "setting link up on %q", veth.Attrs().Name)
 		}
 		if err := odp.AddDatapathInterface(config.DatapathName, veth.Attrs().Name); err != nil {
-			return err
+			return errors.Wrapf(err, "adding interface %q to datapath %q", veth.Attrs().Name, config.DatapathName)
 		}
 		return nil
 	}); err != nil {
-		return err
+		return errors.Wrap(err, "creating bridged fastdp veth pair")
 	}
 
 	if err := linkSetUpByName(config.DatapathName); err != nil {
@@ -305,7 +309,7 @@ func initBridgedFastdp(config *BridgeConfig) error {
 func configureIPTables(config *BridgeConfig) error {
 	ipt, err := iptables.New()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "creating iptables object")
 	}
 	if config.WeaveBridgeName != config.DockerBridgeName {
 		err := ipt.Insert("filter", "FORWARD", 1, "-i", config.DockerBridgeName, "-o", config.WeaveBridgeName, "-j", "DROP")
@@ -378,7 +382,7 @@ func configureIPTables(config *BridgeConfig) error {
 func linkSetUpByName(linkName string) error {
 	link, err := netlink.LinkByName(linkName)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "setting link up on %q", linkName)
 	}
 	return netlink.LinkSetUp(link)
 }
