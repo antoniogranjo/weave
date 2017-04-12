@@ -147,6 +147,7 @@ func main() {
 		trustedSubnetStr   string
 		dbPrefix           string
 		hostRoot           string
+		procPath           string
 		discoveryEndpoint  string
 		token              string
 		advertiseAddress   string
@@ -198,6 +199,7 @@ func main() {
 	mflag.StringVar(&trustedSubnetStr, []string{"-trusted-subnets"}, "", "comma-separated list of trusted subnets in CIDR notation")
 	mflag.StringVar(&dbPrefix, []string{"-db-prefix"}, "/weavedb/weave", "pathname/prefix of filename to store data")
 	mflag.StringVar(&hostRoot, []string{"-host-root"}, "", "path to reach host filesystem")
+	mflag.StringVar(&procPath, []string{"-proc-path"}, "/proc", "path to reach host /proc filesystem")
 	mflag.BoolVar(&bridgeConfig.IsAWSVPC, []string{"-awsvpc"}, false, "use AWS VPC for routing")
 	mflag.StringVar(&discoveryEndpoint, []string{"-peer-discovery-url"}, "https://cloud.weave.works/api/net", "url for peer discovery")
 	mflag.StringVar(&token, []string{"-token"}, "", "token for peer discovery")
@@ -256,7 +258,7 @@ func main() {
 	name := peerName(routerName, bridgeConfig.WeaveBridgeName, dbPrefix, hostRoot)
 
 	bridgeConfig.Mac = name.String()
-	bridgeType, err := weavenet.CreateBridge(&bridgeConfig)
+	bridgeType, err := weavenet.CreateBridge(procPath, &bridgeConfig)
 	checkFatal(err)
 	Log.Println("Bridge type is", bridgeType)
 

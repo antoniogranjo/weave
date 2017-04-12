@@ -53,7 +53,9 @@ if [ -z "$IPALLOC_INIT" ]; then
     fi
 fi
 
-exec /home/weave/weaver $EXTRA_ARGS --port=6783 $BRIDGE_OPTIONS \
+exec /home/weave/weaver $EXTRA_ARGS --port=6783 $(router_bridge_opts) \
+    --host-root=/host \
+    --proc-path=/host/proc \
     --http-addr=$HTTP_ADDR --status-addr=$STATUS_ADDR \
     --no-dns \
     --ipalloc-range=$IPALLOC_RANGE \
