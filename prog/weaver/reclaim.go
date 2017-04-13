@@ -2,6 +2,7 @@ package main
 
 import (
 	"net"
+	"strings"
 
 	docker "github.com/fsouza/go-dockerclient"
 
@@ -114,7 +115,10 @@ func populateDNS(ns *nameserver.Nameserver, dockerCli *weavedocker.Client, ourNa
 				return nil, err
 			}
 			if container.State.Pid != 0 {
-				if container.Config.Domainname == "" {
+				// Docker allows containers to have fqdns in two wauys:
+				// where the container explicitly has a domain name, and when its
+				// hostname contains the domain name, recognized by it having dots.
+				if container.Config.Domainname == "" && !strings.Contains(container.Config.Hostname, ".") {
 					continue
 				}
 				netDevs, err := weavenet.GetNetDevsByVethPeerIds(container.State.Pid, peerIDs)
