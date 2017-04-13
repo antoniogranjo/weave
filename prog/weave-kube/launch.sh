@@ -54,9 +54,6 @@ if [ "${EXPECT_NPC}" = "0" ]; then
     WEAVE_NPC_OPTS=""
 fi
 
-export HOST_ROOT=/host
-/home/weave/weave --local create-bridge --force $WEAVE_NPC_OPTS
-
 # Kubernetes sets HOSTNAME to the host's hostname
 # when running a pod in host namespace.
 NICKNAME_ARG=""
@@ -65,16 +62,6 @@ if [ -n "$HOSTNAME" ] ; then
 fi
 
 BRIDGE_OPTIONS="--datapath=datapath"
-if [ "$(/home/weave/weave --local bridge-type)" = "bridge" ] ; then
-    # TODO: Call into weave script to do this
-    if ! ip link show vethwe-pcap >/dev/null 2>&1 ; then
-        ip link add name vethwe-bridge type veth peer name vethwe-pcap
-        ip link set vethwe-bridge up
-        ip link set vethwe-pcap up
-        ip link set vethwe-bridge master weave
-    fi
-    BRIDGE_OPTIONS="--iface=vethwe-pcap"
-fi
 
 if [ -z "$KUBE_PEERS" ]; then
     if ! KUBE_PEERS=$(/home/weave/kube-peers) || [ -z "$KUBE_PEERS" ]; then
@@ -122,5 +109,6 @@ post_start_actions &
      --ipalloc-range=$IPALLOC_RANGE $NICKNAME_ARG \
      --ipalloc-init $IPALLOC_INIT \
      --conn-limit=$CONN_LIMIT \
+     $WEAVE_NPC_OPTS \
      "$@" \
      $KUBE_PEERS
