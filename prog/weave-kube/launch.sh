@@ -96,6 +96,7 @@ post_start_actions() {
         fi
     fi
     mkdir -p $HOST_ROOT/etc/cni/net.d
+    export HOST_ROOT
     /home/weave/weave --local setup-cni
 
     # Expose the weave network so host processes can communicate with pods
@@ -105,6 +106,7 @@ post_start_actions() {
 post_start_actions &
 
 /home/weave/weaver $EXTRA_ARGS --port=6783 $BRIDGE_OPTIONS \
+     --host-root=$HOST_ROOT \
      --http-addr=$HTTP_ADDR --status-addr=$STATUS_ADDR --docker-api='' --no-dns \
      --ipalloc-range=$IPALLOC_RANGE $NICKNAME_ARG \
      --ipalloc-init $IPALLOC_INIT \
