@@ -5,10 +5,12 @@ import (
 
 	docker "github.com/fsouza/go-dockerclient"
 
+	"github.com/weaveworks/mesh"
 	"github.com/weaveworks/weave/api"
 	"github.com/weaveworks/weave/common"
 	weavedocker "github.com/weaveworks/weave/common/docker"
 	"github.com/weaveworks/weave/ipam"
+	"github.com/weaveworks/weave/nameserver"
 	weavenet "github.com/weaveworks/weave/net"
 	"github.com/weaveworks/weave/net/address"
 )
@@ -83,6 +85,49 @@ func findExistingAddresses(dockerCli *weavedocker.Client, bridgeName string) (ad
 				return nil, err
 			}
 			add(api.NoContainerID, false, netDevs)
+		}
+	}
+	return addrs, nil
+}
+
+func populateDNS(ns *nameserver.Nameserver, dockerCli *weavedocker.Client, ourName mesh.PeerName, bridgeName string) (addrs []ipam.PreClaim, err error) {
+	// Find all veths connected to the bridge
+	peerIDs, err := weavenet.ConnectedToBridgeVethPeerIds(bridgeName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Now iterate over all containers to see if they have a network
+	// namespace with an attached interface
+	if dockerCli != nil {
+		containerIDs, err := dockerCli.RunningContainerIDs()
+		if err != nil {
+			return nil, err
+		}
+
+		for _, cid := range containerIDs {
+			container, err := dockerCli.InspectContainer(cid)
+			if err != nil {
+				if _, ok := err.(*docker.NoSuchContainer); ok {
+					continue
+				}
+				return nil, err
+			}
+			if container.State.Pid != 0 {
+				if container.Config.Domainname == "" {
+					continue
+				}
+				netDevs, err := weavenet.GetNetDevsByVethPeerIds(container.State.Pid, peerIDs)
+				if err != nil {
+					return nil, err
+				}
+				fqdn := container.Config.Hostname + "." + container.Config.Domainname
+				for _, netDev := range netDevs {
+					for _, cidr := range netDev.CIDRs {
+						ns.AddEntry(fqdn, cid, ourName, address.FromIP4(cidr.IP))
+					}
+				}
+			}
 		}
 	}
 	return addrs, nil
