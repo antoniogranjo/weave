@@ -30,7 +30,7 @@ SWARM_MANAGER_PEERS=$(/usr/bin/weaveutil swarm-manager-peers)
 rm -f "/restart.sentinel"
 
 router_bridge_opts() {
-    echo --datapath "$DATAPATH"
+    echo --datapath=datapath
     [ -z "$WEAVE_MTU" ] || echo --mtu "$WEAVE_MTU"
     [ -z "$WEAVE_NO_FASTDP" ] || echo --no-fastdp
 }
