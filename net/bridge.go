@@ -365,35 +365,37 @@ func configureIPTables(config *BridgeConfig) error {
 	if err != nil {
 		return errors.Wrap(err, "creating iptables object")
 	}
-	if config.WeaveBridgeName != config.DockerBridgeName {
-		err := ipt.Insert("filter", "FORWARD", 1, "-i", config.DockerBridgeName, "-o", config.WeaveBridgeName, "-j", "DROP")
+	if config.DockerBridgeName != "" {
+		if config.WeaveBridgeName != config.DockerBridgeName {
+			err := ipt.Insert("filter", "FORWARD", 1, "-i", config.DockerBridgeName, "-o", config.WeaveBridgeName, "-j", "DROP")
+			if err != nil {
+				return err
+			}
+		}
+
+		dockerBridgeIP, err := DeviceIP(config.DockerBridgeName)
 		if err != nil {
 			return err
 		}
-	}
 
-	dockerBridgeIP, err := DeviceIP(config.DockerBridgeName)
-	if err != nil {
-		return err
-	}
+		// forbid traffic to the Weave port from other containers
+		if err = ipt.AppendUnique("filter", "INPUT", "-i", config.DockerBridgeName, "-p", "tcp", "--dst", dockerBridgeIP.String(), "--dport", fmt.Sprint(config.Port), "-j", "DROP"); err != nil {
+			return err
+		}
+		if err = ipt.AppendUnique("filter", "INPUT", "-i", config.DockerBridgeName, "-p", "udp", "--dst", dockerBridgeIP.String(), "--dport", fmt.Sprint(config.Port), "-j", "DROP"); err != nil {
+			return err
+		}
+		if err = ipt.AppendUnique("filter", "INPUT", "-i", config.DockerBridgeName, "-p", "udp", "--dst", dockerBridgeIP.String(), "--dport", fmt.Sprint(config.Port+1), "-j", "DROP"); err != nil {
+			return err
+		}
 
-	// forbid traffic to the Weave port from other containers
-	if err = ipt.AppendUnique("filter", "INPUT", "-i", config.DockerBridgeName, "-p", "tcp", "--dst", dockerBridgeIP.String(), "--dport", fmt.Sprint(config.Port), "-j", "DROP"); err != nil {
-		return err
-	}
-	if err = ipt.AppendUnique("filter", "INPUT", "-i", config.DockerBridgeName, "-p", "udp", "--dst", dockerBridgeIP.String(), "--dport", fmt.Sprint(config.Port), "-j", "DROP"); err != nil {
-		return err
-	}
-	if err = ipt.AppendUnique("filter", "INPUT", "-i", config.DockerBridgeName, "-p", "udp", "--dst", dockerBridgeIP.String(), "--dport", fmt.Sprint(config.Port+1), "-j", "DROP"); err != nil {
-		return err
-	}
-
-	// let DNS traffic to weaveDNS, since otherwise it might get blocked by the likes of UFW
-	if err = ipt.AppendUnique("filter", "INPUT", "-i", config.DockerBridgeName, "-p", "udp", "--dport", "53", "-j", "ACCEPT"); err != nil {
-		return err
-	}
-	if err = ipt.AppendUnique("filter", "INPUT", "-i", config.DockerBridgeName, "-p", "tcp", "--dport", "53", "-j", "ACCEPT"); err != nil {
-		return err
+		// let DNS traffic to weaveDNS, since otherwise it might get blocked by the likes of UFW
+		if err = ipt.AppendUnique("filter", "INPUT", "-i", config.DockerBridgeName, "-p", "udp", "--dport", "53", "-j", "ACCEPT"); err != nil {
+			return err
+		}
+		if err = ipt.AppendUnique("filter", "INPUT", "-i", config.DockerBridgeName, "-p", "tcp", "--dport", "53", "-j", "ACCEPT"); err != nil {
+			return err
+		}
 	}
 
 	if config.ExpectNPC {
