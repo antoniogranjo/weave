@@ -128,7 +128,7 @@ func populateDNS(ns *nameserver.Nameserver, dockerCli *weavedocker.Client, ourNa
 				fqdn := container.Config.Hostname + "." + container.Config.Domainname
 				for _, netDev := range netDevs {
 					for _, cidr := range netDev.CIDRs {
-						ns.AddEntry(fqdn, cid, ourName, address.FromIP4(cidr.IP))
+						ns.CheckAndAddEntry(fqdn, cid, ourName, address.FromIP4(cidr.IP))
 					}
 				}
 			}

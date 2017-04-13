@@ -91,6 +91,19 @@ func (n *Nameserver) AddEntry(hostname, containerid string, origin mesh.PeerName
 	n.broadcastEntries(entry)
 }
 
+func (n *Nameserver) CheckAndAddEntry(fqdn, containerid string, origin mesh.PeerName, addr address.Address) {
+	hostname := dns.Fqdn(fqdn)
+	if !dns.IsSubDomain(n.domain, hostname) {
+		n.infof("Ignoring registration %s %s %s (not a subdomain of %s)", hostname, addr.String(), containerid, n.domain)
+		return
+	}
+	n.Lock()
+	n.infof("adding entry for %s: %s -> %s", containerid, hostname, addr.String())
+	entry := n.entries.add(hostname, containerid, origin, addr)
+	n.Unlock()
+	n.broadcastEntries(entry)
+}
+
 func (n *Nameserver) Lookup(hostname string) []address.Address {
 	n.RLock()
 	defer n.RUnlock()
